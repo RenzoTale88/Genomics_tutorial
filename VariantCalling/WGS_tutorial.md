@@ -73,9 +73,9 @@ This will generate reports in HTML (browser format) that describe the quality of
 
 Have a look at your FastQC reports.
 
-* **How many sequence reads are there in each file?**
+> *How many sequence reads are there in each file?*
 
-* **Which metrics do you have warnings on?**
+> *Which metrics do you have warnings on?*
 
 
 ### Trimming the reads
@@ -100,7 +100,7 @@ fastp \
 This will generate a set of trimmed fastq files for each sample, as well as generate the new FastQC 
 reports for the output datasets. 
 
-* **How many bases have been trimmed for quality in the R1 library?**
+> *How many bases have been trimmed for quality in the R1 library?*
 
 
 ## Alignment of the reads
@@ -129,7 +129,7 @@ samtools faidx REFERENCE/chr20.fa
 This will generate a file called `REFERENCE/chr20.fa.fai`, which contains the information concerning the sequence.
 In particular, the name of the sequences will be in the first column, whereas the size of the sequence will be in the second column.
 
-* **How many bases are present in chromosome 20?**
+> *How many bases are present in chromosome 20?*
 
 Then, we prepare the indexes needed from BWA to align the reads of interest:
 ```
@@ -190,9 +190,9 @@ samtools coverage ALIGN/Holstein_1.sort.bam > ALIGN/Holstein_1.coverage
 The `flagstat` file contains the key metrics for the alignments, including number of aligned reads,
 primary and secondary alignments and more. The second collects the details of the coverage of the sam file.
 
-* **How many properly paired reads are present in the file?**
-* **How many secondarily aligned reads are present in the file?**
-* **How many bases are covered (i.e. have at least one alignment) in the coverage file?**
+> *How many properly paired reads are present in the file?*
+> *How many secondarily aligned reads are present in the file?*
+> *How many bases are covered (i.e. have at least one alignment) in the coverage file?*
 
 ## Alignments post-processing
 ### Filtering the reads
@@ -338,7 +338,7 @@ vcftools --vcf FBAYES/Holstein_1.highQ.recode.vcf --min-meanDP 5 --max-meanDP 60
 
 Additional possible filtering are accessible in the [vcftools documentation](https://vcftools.github.io/man_latest.html).
 
-* **How many variants do we save after the filtering are applied?**
+> *How many variants do we save after the filtering are applied?*
 
 ## Variant Effect Predictor
 Following the quick filtering of the VCF file, we can annotate the variants using the Variant Effect Predictor ([VEP](https://www.ensembl.org/info/docs/tools/vep)) tool.
@@ -359,7 +359,7 @@ This command generate two separate outputs:
 1. An annotated VCF file
 2. An HTML file with the report of the annotated variants
 
-* **How many variants with moderate effect do we have?**
+> *How many variants with moderate effect do we have?*
 
 ## Create a summary report with MultiQC
 Finally, we can collect generic metrics for the whole analysis using [MultiQC](https://multiqc.info/docs/), sinmilarly to what done for the RNA-seq analyses.
