@@ -8,6 +8,9 @@ This repository contains the practicals for the following modules:
 1. [Assembly and pangenomes]()
 1. [RNA-seq analysis]()
 
+> **Note 1 for MacOS users**: some of the tools used in this tutorial will not be available to run on the Apple Silicon chips (M1 to M5) due to the ARM64 architecture and lack of compiled binaries. For these cases, users will have to install each dependency manually from the sources or attempt compiling.
+> **Note 2 for MacOS users**: a possible solution is the use of containers, such as [docker](), [apptainer]() or [podman](); while these are good options, the limited time available makes them inmprossible to adopt for this course.
+
 ## Credits
 This repository uses material created by:
 1. [Andrea Talenti]()
