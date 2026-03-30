@@ -38,14 +38,14 @@ Before proceeding with the analyses, we need to download the raw sequencing data
 
 First, we create the folder that will contain the data using `mkdir`:
 ```
-mkdir DATA && cd DATA
+mkdir DATA
 ```
 
 We can now download the sequencing data into the new folder. To do this we will use the [wget](https://en.wikipedia.org/wiki/Wget) program that can pull files from the internet (in this case dropbox):
 
 ```
-wget https://www.dropbox.com/s/2nw3bokejpueudp/Holstein_1_R1.fq.gz
-wget https://www.dropbox.com/s/zgmxmxkwvtkk5qf/Holstein_1_R2.fq.gz
+wget -O DATA/Holstein_1_R1.fq.gz https://www.dropbox.com/s/2nw3bokejpueudp/Holstein_1_R1.fq.gz
+wget -O DATA/Holstein_1_R2.fq.gz https://www.dropbox.com/s/zgmxmxkwvtkk5qf/Holstein_1_R2.fq.gz
 ```
 
 Note there are two sets of reads as this is [paired end](https://emea.illumina.com/science/technology/next-generation-sequencing/plan-experiments/paired-end-vs-single-read.html) data.
@@ -287,13 +287,16 @@ This will generate an output VCF file ready for downstream analyses.
 ## Repeat for the second sample
 We can now repeat what we have done for a second sample, availble here:
 ```
-
+wget -O DATA/NDama_1_R1.fq.gz https://www.dropbox.com/s/sl25qu47sghh1zr/NDama_1_R1.fq.gz
+wget -O DATA/NDama_1_R2.fq.gz https://www.dropbox.com/s/w1rg72pt12gt2mk/NDama_1_R2.fq.gz
 ```
+
 Rerun the steps for this second individual, aiming to generate a second GVCF file that we can combine with the previous one.
 Remember to activate the right environment to perform the different steps:
 ```
 conda activate readmapping_env
 ```
+
 and then:
 ```
 conda activate variant_calling_env
