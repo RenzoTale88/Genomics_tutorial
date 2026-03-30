@@ -2,16 +2,17 @@
 In this tutorial we will go over how to analyse Illumina WGS data. This will comprise four main steps:
 
 1. Sequencing data QC ([FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/))
-2. Read trimming ([fastp](https://github.com/FelixKrueger/TrimGalore/))
-3. Read alignment with substeps ([BWA-MEM2](https://github.com/bwa-mem2/bwa-mem2))
+1. Read trimming ([fastp](https://github.com/FelixKrueger/TrimGalore/))
+1. Read alignment with substeps ([BWA-MEM2](https://github.com/bwa-mem2/bwa-mem2))
    1. Indexing reference
-   2. Mapping the reads
-   3. Sorting, compressing and indexing
-   3. Gather metrics
-4. Mark duplicates ([fastdup]())
-5. Call variants ([FreeBayes](https://github.com/freebayes/freebayes))
-6. Annotate variants ([VEP](https://www.ensembl.org/info/docs/tools/vep/))
-7. Collect all metrics ([MultiQC](https://multiqc.info/docs/))
+   1. Mapping the reads
+   1. Sorting, compressing and indexing
+   1. Gather metrics
+1. Mark duplicates ([fastdup](https://github.com/zzhofict/FastDup))
+1. Call variants ([Clair3](https://github.com/HKU-BAL/Clair3))
+1. Combine the G.VCF ([GLNexus](https://github.com/dnanexus-rnd/GLnexus))
+1. Annotate variants ([VEP](https://www.ensembl.org/info/docs/tools/vep/))
+1. Collect all metrics ([MultiQC](https://multiqc.info/docs/))
 
 ### Install dependencies
 Before starting the analyses, we need to install all the tools required.
@@ -26,7 +27,7 @@ bash Miniforge3-$(uname)-$(uname -m).sh
 We follow the guided installation to completely install miniforge. Then, we install all the dependencies with the command:
 ```
 mamba create -n readmapping_env -c conda-forge -c bioconda samtools multiqc vcftools bcftools bwa-mem2 fastdup fastp mosdepth fastqc gatk
-mamba create -n variant_calling_env -c conda-forge -c bioconda clair3 clair3-illumina
+mamba create -n variant_calling_env -c conda-forge -c bioconda clair3 clair3-illumina glnexus bcftools vcftools
 mamba create -n annotation_env -c conda-forge -c bioconda ensembl-vep 
 ```
 We need to create multiple environments to avoid issues with the dependencies.
@@ -227,7 +228,11 @@ mkdir MARKDUP
 
 Then, we mark duplicated reads by using `fastdup` as follow:
 ```
-fastdup 
+fastdup \
+   --input FILTER/Holstein_1.filt.bam \
+   --output MARKDUP/Holstein_1.md.bam \
+   --metrics MARKDUP/Holstein_1.fastdup.stats.txt \
+   --num-threads 4
 ```
 This command will run `fastdup` on the input bam file, saving an output bam file in the 
 output folder specified using 4 threads for job.
@@ -255,6 +260,11 @@ wget -O models/ilmn/pileup.pt https://www.bio8.cs.hku.hk/clair3/clair3_models_py
 wget -O models/ilmn/full_alignment.pt https://www.bio8.cs.hku.hk/clair3/clair3_models_pytorch/ilmn/full_alignment.pt
 ```
 
+We then activate the variant calling environment:
+```
+conda activate variant_calling_env
+```
+
 To perform the variant calling we are going to create a new folder where to save our output VCFs:
 ```
 mkdir CLAIR3
@@ -270,41 +280,63 @@ run_clair3.sh \
   --platform="ilmn" \                  ## options: {ont,hifi,ilmn}
   --model_path="${PWD}/models/ilmn" \  ## Path to the model
   --gvcf \                             ## Create also the GVCF file
-  --output=CLAIR3/                     ## output directory
+  --output=CLAIR3/Holstein_1           ## output directory
 ```
 This will generate an output VCF file ready for downstream analyses.
 
-## Compressing and indexing the VCF files
-It is best practice to compress and index the VCF files generated. The compression allows to save space,
-while the indexing speed up the access to the entries of the file. We will compress the VCF file using 
-[bgzip](https://github.com/samtools/tabix), a compression algorithm optimized to work with VCF files:
+## Repeat for the second sample
+We can now repeat what we have done for a second sample, availble here:
 ```
-bgzip FBAYES/Holstein_1.vcf
-```
-This will replace our VCF file with a `.vcf.gz`, a compressed version of this.
 
-Then, we will index the file using [tabix](https://github.com/samtools/tabix):
 ```
-tabix -p vcf FBAYES/Holstein_1.vcf.gz
+Rerun the steps for this second individual, aiming to generate a second GVCF file that we can combine with the previous one.
+Remember to activate the right environment to perform the different steps:
 ```
-This will create a file in `.tbi` format, in which the index will be stored.
+conda activate readmapping_env
+```
+and then:
+```
+conda activate variant_calling_env
+```
+when performing the variant calling.
 
-An alternative method to index is by using the `bcftools index` command:
+> *How many variants does this individual present?*
+> *What is the percentage of mapped reads?*
+> *If higher/lower than the previous one, what can be causing it?*
+
+## Combining the GVCFs
+After variant calling the individual, we can proceed at combining the variants for the two individuals in a single, multi-sample VCF file. We can do so using the [GLNexus](https://github.com/dnanexus-rnd/GLnexus) tool, that provides high speed and compatibility with most tools:
 ```
-bcftools index -t FBAYES/Holstein_1.vcf.gz
+mkdir VCF/
+glnexus_cli \
+   --threads 4 \
+   --mem-gbytes 8G \
+   --config DeepVariant \
+   CLAIR3/*/*.g.vcf.gz > VCF/joint_calling.bcf
+```
+The resulting file will be a single BCF, containg all the variants for all individuals processed and provided to the analysis.
+We can visualize its content using [`bcftools view`](https://github.com/samtools/bcftools):
+```
+bcftools view VCF/joint_calling.bcf | less -S
+```
+
+Before starting to work on the file, we will convert it to compressed VCF (`.vcf.gz`) and index it.
+It is best practice to compress and index the VCF files generated to save space,
+while speeding up the access to the entries of the file. 
+We will convert the file to compressed VCF using again [`bcftools view`](https://github.com/samtools/bcftools), while writing the index for it contextually:
+```
+bcftools view -O z -o VCF/joint_calling.vcf.gz --write-index=tbi --threads 4 VCF/joint_calling.bcf
 ```
 
 ## VCF metrics and statistics
 The VCF files generated by any variant caller are large files that store a large amount of information.
-This makes them very hard to screen by hand, and not easy to visualise. To have a peek to the file themself, we 
-can use the `less` command:
+This makes them very hard to screen by hand, and not easy to visualise. To have a peek to the file themself, we can use the `less` command:
 ```
-less FBAYES/Holstein_1.vcf.gz
+less VCF/joint_calling.vcf.gz
 ```
-Since the lines of the file are long, it can be convenient to add the `-S` option to `less`, which avoid the automatic new line for each row
-in the VCF:
+Since the lines of the file are long, it can be convenient to add the `-S` option to `less`, which avoid the automatic new line for each row in the VCF:
 ```
-less -S FBAYES/Holstein_1.vcf.gz
+less -S VCF/joint_calling.vcf.gz
 ```
 In this case, we can use all the arrows to move around the file vertically (up/down) and horizontally (right/left).
 
@@ -312,19 +344,21 @@ Given the large size of these files, we can use some software to collect metrics
 One of the commonly used tools is [bcftools](https://samtools.github.io/bcftools/bcftools.html), which can screen the VCF for us
 and print out generic metrics: 
 ```
-bcftools stats FBAYES/Holstein_1.vcf.gz > FBAYES/Holstein_1.stats
+bcftools stats VCF/joint_calling.vcf.gz > VCF/joint_calling.bcftools_stats
 ```
 Remember, the `>` character means "**redirection**": it redirect the output of a command from the screen (known as STDOUT) to a 
 file of destination.
 
+> *How many variants does the VCF contains?*
+> *How many of each class?*
+> *What is the transition/transvertion rate?*
+
 
 ## Filter variants
-Combining the files generates a VCF file with a large nubmer fo entries. Several of these might have low coverage
-issues, low quality or high missingness rate.
-These can be filtered out using [vcftools](vcftools.github.io/). We first exclude variants with low QUAL score, 
-suggesting that these are likely wrong calls:
+Combining the files generates a VCF file with a large nubmer fo entries. Several of these might have low coverage issues, low quality or high missingness rate.
+These can be filtered out using [vcftools](vcftools.github.io/). We first exclude variants with low QUAL score, suggesting that these are likely wrong calls:
 ```
-vcftools --gzvcf FBAYES/Holstein_1.vcf.gz --minQ 20 --recode --recode-INFO-all --out FBAYES/Holstein_1.highQ
+vcftools --gzvcf VCF/joint_calling.vcf.gz --minQ 20 --recode --recode-INFO-all --out VCF/joint_calling.highQ
 ```
 
 Then, we filter out variants with too low depth of sequencing. The depth of sequencing is the number of reads aligned to a given base,
@@ -333,7 +367,7 @@ from errors, whereas regions with too high depth are likely to be repetitive reg
 The VCF file codify the depth of sequencing in the `DP` field, and is associated to each genotype for each individual.  
 To filter out variants with low (depth < 5) or high (depth > 50) depth of sequencing, we use `vcftools` again:
 ```
-vcftools --vcf FBAYES/Holstein_1.highQ.recode.vcf --min-meanDP 5 --max-meanDP 60 --recode --recode-INFO-all --out FBAYES/Holstein_1.highQ.5-60DP
+vcftools --vcf VCF/joint_calling.highQ.recode.vcf --min-meanDP 5 --max-meanDP 60 --recode --recode-INFO-all --out VCF/joint_calling.highQ.5-60DP
 ```
 
 Additional possible filtering are accessible in the [vcftools documentation](https://vcftools.github.io/man_latest.html).
@@ -352,7 +386,7 @@ mkdir VEP
 
 Then, we annotate the vcf file using the VEP software:
 ```
-vep -i FBAYES/Holstein_1.highQ.5-60DP.recode.vcf --species bos_taurus -o VEP/Holstein_1.highQ.5-60DP.recode.vep.vcf --vcf --database
+vep -i VCF/joint_calling.highQ.5-60DP.recode.vcf --species bos_taurus -o VCF/joint_calling.highQ.5-60DP.recode.vep.vcf --vcf --database
 ```
 
 This command generate two separate outputs:
@@ -362,7 +396,7 @@ This command generate two separate outputs:
 > *How many variants with moderate effect do we have?*
 
 ## Create a summary report with MultiQC
-Finally, we can collect generic metrics for the whole analysis using [MultiQC](https://multiqc.info/docs/), sinmilarly to what done for the RNA-seq analyses.
+Finally, we can collect generic metrics for the whole analysis using [MultiQC](https://multiqc.info/docs/).
 To do so, we can simply run:
 ```
 multiqc .
