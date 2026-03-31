@@ -17,7 +17,6 @@ This will comprise the following steps:
 	1. ([minigraph](https://github.com/lh3/minigraph))
 	1. ([pggb](https://github.com/pangenome/pggb))
 1. Pangenome visualization ([Bandage-NG](https://github.com/asl/BandageNG))
-1. Pangenome genotyping ([PanGenie](https://github.com/eblerjana/pangenie))
 
 ## *De novo* genome assembly
 
@@ -28,7 +27,7 @@ We use anaconda once again, as it provides a reasonably fast and self-contained 
 We will still need separate environments to avoid compatibility issues:
 ```
 mamba create -n assembly_env -c conda-forge -c bioconda -c rust-mdbg fastp ragtag seqtk samtools ncbi-datasets-cli yak compleasm
-mamba create -n pangenome_creation_env -c conda-forge -c bioconda pggb
+mamba create -n pangenome_creation_env -c conda-forge -c bioconda pggb minigraph
 mamba create -n pangenome_calling_env -c conda-forge -c bioconda pangenie
 ```
 
