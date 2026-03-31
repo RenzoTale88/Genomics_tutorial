@@ -16,7 +16,8 @@ In this tutorial we will go over how to analyse Illumina WGS data. This will com
 
 ### Install dependencies
 Before starting the analyses, we need to install all the tools required.
-To do so, we will use [miniforge](), that enables us to install several dependencies easily, without the need to compile anything:
+For this tutorial we will use [anaconda](https://anaconda.org/),an open source distribution platform initially designed for python packages, but that can ship also other tools. Anaconda works with [virtual environments](https://en.wikipedia.org/wiki/Virtual_environment_software), a contained isolated installations and dependencies.
+To do so, we will use [miniforge](https://github.com/conda-forge/miniforge), that enables us to install several dependencies easily, without the need to compile anything:
 ```
 wget "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
 ```
@@ -24,6 +25,12 @@ And then run it with:
 ```
 bash Miniforge3-$(uname)-$(uname -m).sh
 ```
+
+We then run:
+```
+source ~/.bashrc
+```
+
 We follow the guided installation to completely install miniforge. Then, we install all the dependencies with the command:
 ```
 mamba create -n readmapping_env -c conda-forge -c bioconda samtools multiqc vcftools bcftools bwa-mem2 fastdup fastp mosdepth fastqc gatk
@@ -50,10 +57,6 @@ wget -O DATA/Holstein_1_R2.fq.gz https://www.dropbox.com/s/zgmxmxkwvtkk5qf/Holst
 
 Note there are two sets of reads as this is [paired end](https://emea.illumina.com/science/technology/next-generation-sequencing/plan-experiments/paired-end-vs-single-read.html) data.
 
-Finally, we exit from the `DATA` folder:
-```
-cd ../
-```
 
 ## Preprocessing the reads
 ### Quality check of the reads
@@ -63,6 +66,11 @@ using a `for` loop.
 First, we create the output directory named `FASTQC` with `mkdir`:
 ```
 mkdir FASTQC
+```
+
+Then, we activate the right anaconda environment:
+```
+conda activate readmapping_env
 ```
 
 Then, for each sample name present in the DATA folder, we can 
@@ -110,16 +118,12 @@ Reads alignment involves a series of step
 Before running the alignment, we need to download and prepare the reference genome to process.
 We first create the folder where to save our reference genome:
 ```
-mkdir REFERENCE && cd REFERENCE
+mkdir REFERENCE
 ```
 
 To facilitate the process, we provide a reference sequence comprising of only chromosome 20:
 ```
-wget https://www.dropbox.com/s/dq2qgdko6pgk14o/chr20.fa
-```
-And then we can exit the folder:
-```
-cd ..
+wget -O REFERENCE/chr20.fa https://www.dropbox.com/s/dq2qgdko6pgk14o/chr20.fa
 ```
 
 Firstly, we prepare the `fai` index, which summarises the sequence names, size and position in the file.
@@ -152,7 +156,7 @@ mkdir ALIGN
 
 Then, we align each sample and save it in a separate subfolder
 ```
-bwa-mem2 mem -R "@RG\tID:Holstein_1\tSM:Holstein_1" -t 1 REFERENCE/chr20.fa TRIM/Holstein_1_R1_val_1.fq.gz TRIM/Holstein_1_R2_val_2.fq.gz > ALIGN/Holstein_1.raw.sam
+bwa-mem2 mem -R "@RG\tID:Holstein_1\tSM:Holstein_1" -t 1 REFERENCE/chr20.fa TRIM/Holstein_1_R1.trimmed.fq.gz TRIM/Holstein_1_R2.trimmed.fq.gz > ALIGN/Holstein_1.raw.sam
 ```
 
 This will save the aligned reads in SAM (Sequence Alignment Map) format.
@@ -232,7 +236,8 @@ fastdup \
    --input FILTER/Holstein_1.filt.bam \
    --output MARKDUP/Holstein_1.md.bam \
    --metrics MARKDUP/Holstein_1.fastdup.stats.txt \
-   --num-threads 4
+   --create-index \
+   --num-threads 2
 ```
 This command will run `fastdup` on the input bam file, saving an output bam file in the 
 output folder specified using 4 threads for job.
@@ -248,6 +253,7 @@ Among the most popular, we have to mention:
 3. [FreeBayes](https://github.com/freebayes/freebayes): another commonly adopted variant caller, uses bayesian inference to in place of the maximum likelyhood method from 
 4. [DeepVariant](https://github.com/google/deepvariant): Google's own variant caller, uses an AI image classification approach to quickly identify the variants
 5. [Clair3](https://github.com/HKU-BAL/Clair3): another toold using AI and Deep Learning to detect variants in the reads provided
+6. [octopus](): a variant caller using tree-based approaches to identify variants.
 
 In our case, we are going to use Clair3, which is a popular, well-established variant caller with plenty of 
 functionality. Clair3 has a large number of parameters that can be fine-tuned to achieve greater sensitivity, 
@@ -271,16 +277,23 @@ mkdir CLAIR3
 ```
 
 Then, we can proceed with the variant calling. In our case, we are going to run the caller with base parameters.
+We can target the region of interest by providing the region in the BED format:
+```
+echo -e '20\t31200000\t32800000' > CLAIR3/region.bed
+```
+
 We can call the variants as follow: 
 ```
 run_clair3.sh \
-  --bam_fn=MARKDUP/Holstein_1.md.bam \ ## change your bam file name here
-  --ref_fn=REFERENCE/chr20.fa \        ## change your reference file name here
-  --threads=4 \                        ## maximum threads to be used
-  --platform="ilmn" \                  ## options: {ont,hifi,ilmn}
-  --model_path="${PWD}/models/ilmn" \  ## Path to the model
-  --gvcf \                             ## Create also the GVCF file
-  --output=CLAIR3/Holstein_1           ## output directory
+  --bam_fn=MARKDUP/Holstein_1.md.bam \
+  --ref_fn=REFERENCE/chr20.fa \
+  --threads=1 \
+  --platform="ilmn" \
+  --bed_fn="CLAIR3/region.bed" \
+  --model_path="${PWD}/models/ilmn" \
+  --sample_name Holstein_1 \
+  --gvcf \
+  --output=CLAIR3/Holstein_1
 ```
 This will generate an output VCF file ready for downstream analyses.
 
@@ -311,11 +324,24 @@ when performing the variant calling.
 After variant calling the individual, we can proceed at combining the variants for the two individuals in a single, multi-sample VCF file. We can do so using the [GLNexus](https://github.com/dnanexus-rnd/GLnexus) tool, that provides high speed and compatibility with most tools:
 ```
 mkdir VCF/
-glnexus_cli \
-   --threads 4 \
-   --mem-gbytes 8G \
-   --config DeepVariant \
-   CLAIR3/*/*.g.vcf.gz > VCF/joint_calling.bcf
+```
+We then download the appropriate configuration for GLNexus to work with Clair3's outputs:
+```
+wget -O VCF/clair3.yml http://www.bio8.cs.hku.hk/clair3_trio/config/clair3.yml
+```
+
+Before running GLNexus, we need to ensure that each file has a unique name, otherwise the tool will complain:
+```
+mkdir GVCFS
+cp CLAIR3/Holstein_1/merge_output.gvcf.gz GVCFS/Holstein_1.gvcf.gz
+cp CLAIR3/Holstein_1/merge_output.gvcf.gz GVCFS/Holstein_1.gvcf.gz.tbi
+cp CLAIR3/NDama_1/merge_output.gvcf.gz GVCFS/NDama_1.gvcf.gz
+cp CLAIR3/NDama_1/merge_output.gvcf.gz GVCFS/NDama_1.gvcf.gz.tbi
+```
+
+and then, we can run glnexus with the desired configuration:
+```
+glnexus_cli --threads 1 --config VCF/clair3.yml GVCFS/*.g.vcf.gz > VCF/joint_calling.bcf
 ```
 The resulting file will be a single BCF, containg all the variants for all individuals processed and provided to the analysis.
 We can visualize its content using [`bcftools view`](https://github.com/samtools/bcftools):
@@ -328,7 +354,7 @@ It is best practice to compress and index the VCF files generated to save space,
 while speeding up the access to the entries of the file. 
 We will convert the file to compressed VCF using again [`bcftools view`](https://github.com/samtools/bcftools), while writing the index for it contextually:
 ```
-bcftools view -O z -o VCF/joint_calling.vcf.gz --write-index=tbi --threads 4 VCF/joint_calling.bcf
+bcftools view -O z -o VCF/joint_calling.vcf.gz --write-index=tbi VCF/joint_calling.bcf
 ```
 
 ## VCF metrics and statistics
@@ -377,14 +403,24 @@ Additional possible filtering are accessible in the [vcftools documentation](htt
 
 > *How many variants do we save after the filtering are applied?*
 
-## Variant Effect Predictor
-Following the quick filtering of the VCF file, we can annotate the variants using the Variant Effect Predictor ([VEP](https://www.ensembl.org/info/docs/tools/vep)) tool.
+## Functional variant annotation
+Following the quick filtering of the VCF file, we can annotate the variants using either:
+1. the Variant Effect Predictor ([VEP](https://www.ensembl.org/info/docs/tools/vep)) tool; or
+2. [snpEff](https://pcingola.github.io/SnpEff/snpeff/introduction)
+
 VEP is a complex software, with multiple options available and configuration that can be used. It also undergoes to frequent revision to incorporate new data, making
 it important to point out which version of the software we are using. In our case, we are processing the data using the latest version of the software (v106.1 at the 
 time of writing this tutorial). 
 First off, we create the output directory:
 ```
 mkdir VEP
+```
+
+We first download the cache for the *Bos taurus* species, as this speeds up analysis greatly:
+```
+mkdir vep_cache
+wget -O vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz https://ftp.ensembl.org/pub/release-115/variation/indexed_vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz
+tar xvfz vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz
 ```
 
 Then, we annotate the vcf file using the VEP software:
