@@ -223,6 +223,7 @@ There are currently a few different specialized solutions available to generate 
 Firstly, we will try to generate a contained graph genome focused on large rearrangements using [minigraph](https://github.com/lh3/minigraph). To do so, we can simply run the following command:
 ```
 mkdir -p GRAPH/MG/
-minigraph - > GRAPH/MG/minigraph.gfa
+minigraph -cxggs -l10k ncbi_dataset/data/GCF_000001215.4/*.fna ncbi_dataset/data/GCA_*/*.fna ragtag_output/example.msimpl.fa > GRAPH/MG/minigraph.gfa
 ```
-This will generate a graph genome called `minigraph.gfa`. We can visualize the graph using `Bandage-NG`, which helps us 
+This will generate a graph genome called `minigraph.gfa`. We can visualize the graph using `Bandage-NG`, which helps us visualize the content of the graph genome.
+

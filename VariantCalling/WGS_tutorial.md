@@ -11,7 +11,7 @@ In this tutorial we will go over how to analyse Illumina WGS data. This will com
 1. Mark duplicates ([fastdup](https://github.com/zzhofict/FastDup))
 1. Call variants ([Clair3](https://github.com/HKU-BAL/Clair3))
 1. Combine the G.VCF ([GLNexus](https://github.com/dnanexus-rnd/GLnexus))
-1. Annotate variants ([VEP](https://www.ensembl.org/info/docs/tools/vep/))
+1. Annotate variants ([snpEff](https://pcingola.github.io/SnpEff/))
 1. Collect all metrics ([MultiQC](https://multiqc.info/docs/))
 
 ### Install dependencies
@@ -34,8 +34,7 @@ source ~/.bashrc
 We follow the guided installation to completely install miniforge. Then, we install all the dependencies with the command:
 ```
 mamba create -n readmapping_env -c conda-forge -c bioconda samtools multiqc vcftools bcftools bwa-mem2 fastdup fastp mosdepth fastqc gatk
-mamba create -n variant_calling_env -c conda-forge -c bioconda clair3 clair3-illumina glnexus bcftools vcftools
-mamba create -n annotation_env -c conda-forge -c bioconda ensembl-vep 
+mamba create -n variant_calling_env -c conda-forge -c bioconda clair3 clair3-illumina glnexus bcftools vcftools snpeff
 ```
 We need to create multiple environments to avoid issues with the dependencies.
 
@@ -408,29 +407,15 @@ Following the quick filtering of the VCF file, we can annotate the variants usin
 1. the Variant Effect Predictor ([VEP](https://www.ensembl.org/info/docs/tools/vep)) tool; or
 2. [snpEff](https://pcingola.github.io/SnpEff/snpeff/introduction)
 
-VEP is a complex software, with multiple options available and configuration that can be used. It also undergoes to frequent revision to incorporate new data, making
-it important to point out which version of the software we are using. In our case, we are processing the data using the latest version of the software (v106.1 at the 
-time of writing this tutorial). 
-First off, we create the output directory:
+`VEP` is a complex software, with multiple options available and configuration that can be used. It also undergoes to frequent revision to incorporate new data, making it important to point out which version of the software we are using. In our case, we are processing the data using the latest version of the software (v115 at the time of writing this tutorial). 
+snpEff is also a valid choice, providing easier adoption and good performance while supporting a large collection of pre-compiled annotations.
+
+Then, we annotate the vcf file using the `snpEff` software:
 ```
-mkdir VEP
+snpeff bosTau9 VCF/joint_calling.highQ.5-60DP.recode.vcf -htmlStats VCF/joint_calling.highQ.5-60DP.recode.annot.html -csvStats VCF/joint_calling.highQ.5-60DP.recode.annot.csv > VCF/joint_calling.highQ.5-60DP.recode.annot.vcf
 ```
 
-We first download the cache for the *Bos taurus* species, as this speeds up analysis greatly:
-```
-mkdir vep_cache
-wget -O vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz https://ftp.ensembl.org/pub/release-115/variation/indexed_vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz
-tar xvfz vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz
-```
-
-Then, we annotate the vcf file using the VEP software:
-```
-vep -i VCF/joint_calling.highQ.5-60DP.recode.vcf --species bos_taurus -o VCF/joint_calling.highQ.5-60DP.recode.vep.vcf --vcf --database
-```
-
-This command generate two separate outputs:
-1. An annotated VCF file
-2. An HTML file with the report of the annotated variants
+This command generate an annotated VCF file.
 
 > *How many variants with moderate effect do we have?*
 
