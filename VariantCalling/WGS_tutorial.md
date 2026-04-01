@@ -34,7 +34,7 @@ source ~/.bashrc
 We follow the guided installation to completely install miniforge. Then, we install all the dependencies with the command:
 ```
 mamba create -n readmapping_env -c conda-forge -c bioconda samtools multiqc vcftools bcftools bwa-mem2 fastdup fastp mosdepth fastqc gatk
-mamba create -n variant_calling_env -c conda-forge -c bioconda clair3 clair3-illumina glnexus bcftools vcftools snpeff
+mamba create -n variant_calling_env -c conda-forge -c bioconda clair3 clair3-illumina glnexus bcftools vcftools snpeff multiqc
 ```
 We need to create multiple environments to avoid issues with the dependencies.
 
