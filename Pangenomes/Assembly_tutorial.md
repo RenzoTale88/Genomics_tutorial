@@ -33,8 +33,8 @@ mamba create -n pangenome_calling_env -c conda-forge -c bioconda pangenie
 One of the necessary tools is not included in the download, so we need to install it ourselves:
 ```
 mkdir tools
-wget -O tools/magic_simplify https://raw.githubusercontent.com/ekimb/rust-mdbg/refs/heads/master/utils/magic_simplify
-chmod +x tools/magic_simplify
+git clone https://www.github.com/ekimb/rust-mdbg
+chmod +x rust-mdbg/tools/magic_simplify
 ```
 
 ### Data
@@ -97,14 +97,14 @@ gunzip -c TRIM/hifi.minQ20.min1Kb.fq.gz > TRIM/hifi.minQ20.min1Kb.fq
 
 The rust-mdbg assembler can be run in different ways, including a multi-testing approach that allows to assess the best parameters for the analysis. For sake of conciseness, we will use the same command provided in the tutorial. 
 ```
-rust-mdbg TRIM/hifi.minQ20.min1Kb.fq -k 31 -l 24 --density 0.003 --bf --minabund 2 --prefix TRIM/example
+rust-mdbg TRIM/hifi.minQ20.min1Kb.fq -k 31 -l 24 --density 0.003 --bf --minabund 2 --prefix MDBG/example
 ```
 
 In a real experiment, you'd assess multiple parameters in order to achieve the best assembly possible. It is also unlikely you will use rust-mdbg, as other solution deliver better results in reasonable amount of time.
 
 The output needs to be processed further to obtain a standard fasta from the outputs of the assembler. `rust-mdbg` provides the `magic_simplify` utility, which convert the results of the assembler automatically:
 ```
-tools/magic_simplify MDBG/example
+./rust-mdbg/tools/magic_simplify MDBG/example
 ```
 
 The results will be available in `MDBG/example.msimpl.fa`. We can index the fasta file using `samtools` with the command:
