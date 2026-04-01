@@ -318,6 +318,15 @@ when performing the variant calling.
 > *What is the percentage of mapped reads?*
 > *If higher/lower than the previous one, what can be causing it?*
 
+If you decide to start the analyses from after the variant calling, you can download the called VCF files as follow:
+```
+mkdir -p GVCFS/
+wget https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/Holstein_1.gvcf.gz
+wget https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/Holstein_1.gvcf.gz.tbi
+wget https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/NDama_1.gvcf.gz
+wget https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/NDama_1.gvcf.gz.tbi
+```
+
 ## Combining the GVCFs
 After variant calling the individual, we can proceed at combining the variants for the two individuals in a single, multi-sample VCF file. We can do so using the [GLNexus](https://github.com/dnanexus-rnd/GLnexus) tool, that provides high speed and compatibility with most tools:
 ```
@@ -407,8 +416,9 @@ Following the quick filtering of the VCF file, we can annotate the variants usin
 2. [snpEff](https://pcingola.github.io/SnpEff/snpeff/introduction)
 
 `VEP` is a complex software, with multiple options available and configuration that can be used. It also undergoes to frequent revision to incorporate new data, making it important to point out which version of the software we are using. In our case, we are processing the data using the latest version of the software (v115 at the time of writing this tutorial). 
-snpEff is also a valid choice, providing easier adoption and good performance while supporting a large collection of pre-compiled annotations.
+`snpEff` is also a valid choice, providing easier adoption and good performance while supporting a large collection of pre-compiled annotations.
 
+### snpEff
 Then, we annotate the vcf file using the `snpEff` software:
 ```
 snpEff bosTau9 VCF/joint_calling.highQ.5-60DP.recode.vcf -htmlStats VCF/joint_calling.highQ.5-60DP.recode.annot.html -csvStats VCF/joint_calling.highQ.5-60DP.recode.annot.csv > VCF/joint_calling.highQ.5-60DP.recode.annot.vcf
@@ -416,12 +426,30 @@ snpEff bosTau9 VCF/joint_calling.highQ.5-60DP.recode.vcf -htmlStats VCF/joint_ca
 
 This command generate an annotated VCF file.
 
+### VEP
+To do the same with VEP, we need to first create a separate VEP environment as follow:
+```
+mamba create -y -n vep_env -c conda-forge -c bioconda ensembl-vep
+conda activate vep_env
+```
+Then, we need to download the appropriate cache:
+```
+mkdir vep_cache
+wget -O vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz https://ftp.ensembl.org/pub/release-115/variation/indexed_vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz
+tar xvfz vep_cache/bos_taurus_vep_115_ARS-UCD2.0.tar.gz
+```
+Then, we can run the VEP providing the appropriate cache:
+```
+vep -i VCF/joint_calling.highQ.5-60DP.recode.vcf --species bos_taurus -o VCF/joint_calling.highQ.5-60DP.recode.vep.vcf --vcf --cache --dir_cache vep_cache
+```
+
 > *How many variants with moderate effect do we have?*
 
 ## Create a summary report with MultiQC
 Finally, we can collect generic metrics for the whole analysis using [MultiQC](https://multiqc.info/docs/).
 To do so, we can simply run:
 ```
+conda activate variant_calling_env
 multiqc .
 ```
 The resulting report will be saved as `multiqc_report.html`, and can be visualized using any browser.
