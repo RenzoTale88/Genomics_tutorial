@@ -60,8 +60,7 @@ Note there are two sets of reads as this is [paired end](https://emea.illumina.c
 ## Preprocessing the reads
 ### Quality check of the reads
 Similarly to what done for the RNA-seq data, the first thing to do in a sequencing project is to check the quality of the data.
-We can check the quality of Illumina data is [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) it for all our samples
-using a `for` loop.
+We can check the quality of Illumina data is [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/).
 First, we create the output directory named `FASTQC` with `mkdir`:
 ```
 mkdir FASTQC
@@ -252,7 +251,7 @@ Among the most popular, we have to mention:
 3. [FreeBayes](https://github.com/freebayes/freebayes): another commonly adopted variant caller, uses bayesian inference to in place of the maximum likelyhood method from 
 4. [DeepVariant](https://github.com/google/deepvariant): Google's own variant caller, uses an AI image classification approach to quickly identify the variants
 5. [Clair3](https://github.com/HKU-BAL/Clair3): another toold using AI and Deep Learning to detect variants in the reads provided
-6. [octopus](): a variant caller using tree-based approaches to identify variants.
+6. [octopus](https://luntergroup.github.io/octopus/): a variant caller using tree-based approaches to identify variants.
 
 In our case, we are going to use Clair3, which is a popular, well-established variant caller with plenty of 
 functionality. Clair3 has a large number of parameters that can be fine-tuned to achieve greater sensitivity, 
@@ -340,7 +339,7 @@ cp CLAIR3/NDama_1/merge_output.gvcf.gz GVCFS/NDama_1.gvcf.gz.tbi
 
 and then, we can run glnexus with the desired configuration:
 ```
-glnexus_cli --threads 1 --config VCF/clair3.yml GVCFS/*.g.vcf.gz > VCF/joint_calling.bcf
+glnexus_cli --threads 1 --config VCF/clair3.yml GVCFS/*.gvcf.gz > VCF/joint_calling.bcf
 ```
 The resulting file will be a single BCF, containg all the variants for all individuals processed and provided to the analysis.
 We can visualize its content using [`bcftools view`](https://github.com/samtools/bcftools):
@@ -412,7 +411,7 @@ snpEff is also a valid choice, providing easier adoption and good performance wh
 
 Then, we annotate the vcf file using the `snpEff` software:
 ```
-snpeff bosTau9 VCF/joint_calling.highQ.5-60DP.recode.vcf -htmlStats VCF/joint_calling.highQ.5-60DP.recode.annot.html -csvStats VCF/joint_calling.highQ.5-60DP.recode.annot.csv > VCF/joint_calling.highQ.5-60DP.recode.annot.vcf
+snpEff bosTau9 VCF/joint_calling.highQ.5-60DP.recode.vcf -htmlStats VCF/joint_calling.highQ.5-60DP.recode.annot.html -csvStats VCF/joint_calling.highQ.5-60DP.recode.annot.csv > VCF/joint_calling.highQ.5-60DP.recode.annot.vcf
 ```
 
 This command generate an annotated VCF file.
