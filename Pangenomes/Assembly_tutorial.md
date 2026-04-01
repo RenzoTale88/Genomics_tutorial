@@ -30,12 +30,6 @@ mamba create -n assembly_env -c conda-forge -c bioconda rust-mdbg gfatools fastp
 mamba create -n pangenome_creation_env -c conda-forge -c bioconda pggb minigraph
 mamba create -n pangenome_calling_env -c conda-forge -c bioconda pangenie
 ```
-One of the necessary tools is not included in the download, so we need to install it ourselves:
-```
-mkdir tools
-git clone https://www.github.com/ekimb/rust-mdbg
-chmod +x rust-mdbg/tools/magic_simplify
-```
 
 ### Data
 First thing, we have to download the appropriate data. To keep the analysis time within reason, we will use *Drosophila melanogaster* genomes. We will use a publicly available sample from ENA (SRR36576747):
@@ -102,14 +96,17 @@ rust-mdbg TRIM/hifi.minQ20.min1Kb.fq -k 31 -l 24 --density 0.003 --bf --minabund
 
 In a real experiment, you'd assess multiple parameters in order to achieve the best assembly possible. It is also unlikely you will use rust-mdbg, as other solution deliver better results in reasonable amount of time.
 
-The output needs to be processed further to obtain a standard fasta from the outputs of the assembler. `rust-mdbg` provides the `magic_simplify` utility, which convert the results of the assembler automatically:
+The output needs to be processed further to obtain a standard fasta from the outputs of the assembler. 
+We need to perform some post-processing to extract the contigs from the drafted assembly:
 ```
-./rust-mdbg/tools/magic_simplify MDBG/example
+gfatools asm MDBG/example.gfa -u > MDBG/example.tmp1.gfa
+to_basespace --gfa MDBG/example.tmp1.gfa --sequences MDBG/example
+gfatools gfa2fa MDBG/example.tmp1.gfa.final.gfa > MDBG/example.asm.gfa
 ```
 
-The results will be available in `MDBG/example.msimpl.fa`. We can index the fasta file using `samtools` with the command:
+The results will be available in `MDBG/example.asm.fa`. We can index the fasta file using `samtools` with the command:
 ```
-samtools faidx MDBG/example.msimpl.fa
+samtools faidx MDBG/example.asm.fa
 ```
 
 > *How many sequences have been generated?*
@@ -132,16 +129,16 @@ Then, we can begin computing the statistics.
 First, we compute the Nx statistics with `calN50`:
 ```
 mkdir tools
-curl -O tools/calN50.js https://raw.githubusercontent.com/lh3/calN50/master/calN50.js
-k8 tools/calN50.js MDBG/example.msimpl.fa
-k8 tools/calN50.js -L 143700000 MDBG/example.msimpl.fa
+wget -O tools/calN50.js https://raw.githubusercontent.com/lh3/calN50/master/calN50.js
+k8 tools/calN50.js MDBG/example.asm.fa
+k8 tools/calN50.js -L 143700000 MDBG/example.asm.fa
 ```
 
 We can also calculate the conserved gene completeness based on the genes expected in this phylogeny. 
 We'll manually install this tool due to unnecessary conflicts in conda.
 ```
 compleasm download diptera -L mb_download
-compleasm run -a MDBG/example.msimpl.fa -o completeness -l diptera -L mb_download -t 4
+compleasm run -a MDBG/example.asm.fa -o completeness -l diptera -L mb_download -t 4
 ```
 
 Finally, we can check the accuracy of our assembly by using the [yak](https://github.com/lh3/yak) software.
@@ -152,7 +149,7 @@ yak count -b37 -t4 -o TRIM/ccs.yak TRIM/hifi.minQ20.min1Kb.fq.gz
 
 Then, we can compute the quality values using `yak qv`:
 ```
-yak qv -t4 -p -K144m -l100k TRIM/ccs.yak MDBG/example.msimpl.fa > asm-sr.qv.txt
+yak qv -t4 -p -K144m -l100k TRIM/ccs.yak MDBG/example.asm.fa > asm-sr.qv.txt
 ```
 
 > *What is the contig N50?*
@@ -180,7 +177,7 @@ We can now refer to the reference genome using `$REFERENCE`
 
 Then, we can check the assembly for misassemblies using [RagTag](https://github.com/malonge/RagTag)'s `correct` command:
 ```
-ragtag.py correct $REFERENCE MDBG/example.msimpl.fa
+ragtag.py correct $REFERENCE MDBG/example.asm.fa
 ```
 
 The result is in the `ragtag_output` directory.
