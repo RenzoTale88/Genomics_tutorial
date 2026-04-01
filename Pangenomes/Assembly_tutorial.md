@@ -26,9 +26,15 @@ First, we create the appropriate conda environments to analyse the data.
 We use anaconda once again, as it provides a reasonably fast and self-contained way to install all dependencies.
 We will still need separate environments to avoid compatibility issues:
 ```
-mamba create -n assembly_env -c conda-forge -c bioconda -c rust-mdbg fastp ragtag seqtk samtools ncbi-datasets-cli yak compleasm
+mamba create -n assembly_env -c conda-forge -c bioconda rust-mdbg gfatools fastp ragtag seqtk samtools ncbi-datasets-cli yak compleasm
 mamba create -n pangenome_creation_env -c conda-forge -c bioconda pggb minigraph
 mamba create -n pangenome_calling_env -c conda-forge -c bioconda pangenie
+```
+One of the necessary tools is not included in the download, so we need to install it ourselves:
+```
+mkdir tools
+wget -O tools/magic_simplify https://raw.githubusercontent.com/ekimb/rust-mdbg/refs/heads/master/utils/magic_simplify
+chmod +x tools/magic_simplify
 ```
 
 ### Data
@@ -38,6 +44,10 @@ mkdir DATA
 wget -O DATA/hifi.fastq.gz ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR313/041/SRR31301441/SRR31301441_subreads.fastq.gz
 ```
 The file is quite large, so it will take a bit to download.
+Then, we activate the right environment for the initial analyses:
+```
+conda activate assembly_env
+```
 
 ### Read trimming
 Firstly, we need to filter the low quality reads. Too short reads can impact the genome assembly negatively by increasing the compute time and noise the assembler has to deal with.
@@ -56,7 +66,7 @@ Then, we can filter our reads by using fastp as follow:
 fastp \
 	--html=TRIM/hifi.fastp.html \
 	--json=TRIM/hifi.fastp.json \
-	--thread 8 \
+	--thread 2 \
 	--qualified_quality_phred 20 \
 	--length_required 1000 \
 	--in1 DATA/hifi.fastq.gz \
@@ -94,7 +104,7 @@ In a real experiment, you'd assess multiple parameters in order to achieve the b
 
 The output needs to be processed further to obtain a standard fasta from the outputs of the assembler. `rust-mdbg` provides the `magic_simplify` utility, which convert the results of the assembler automatically:
 ```
-magic_simplify MDBG/example
+tools/magic_simplify MDBG/example
 ```
 
 The results will be available in `MDBG/example.msimpl.fa`. We can index the fasta file using `samtools` with the command:
