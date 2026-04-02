@@ -96,12 +96,11 @@ rust-mdbg TRIM/hifi.minQ20.min1Kb.fq -k 31 -l 24 --density 0.003 --bf --minabund
 
 In a real experiment, you'd assess multiple parameters in order to achieve the best assembly possible. It is also unlikely you will use rust-mdbg, as other solution deliver better results in reasonable amount of time.
 
-The output needs to be processed further to obtain a standard fasta from the outputs of the assembler. 
-We need to perform some post-processing to extract the contigs from the drafted assembly:
+The output needs to be processed further to obtain a standard fasta from the outputs of the assembler. This code is a slight modification from the [magic_simplify](https://github.com/ekimb/rust-mdbg/blob/master/utils/magic_simplify) script provided by `rust-mdbg` itself:
 ```
 gfatools asm MDBG/example.gfa -u > MDBG/example.tmp1.gfa
 to_basespace --gfa MDBG/example.tmp1.gfa --sequences MDBG/example
-gfatools gfa2fa MDBG/example.tmp1.gfa.final.gfa > MDBG/example.asm.gfa
+gfatools gfa2fa MDBG/example.tmp1.gfa.complete.gfa | fold > MDBG/example.asm.fa
 ```
 
 The results will be available in `MDBG/example.asm.fa`. We can index the fasta file using `samtools` with the command:
@@ -130,8 +129,8 @@ First, we compute the Nx statistics with `calN50`:
 ```
 mkdir tools
 wget -O tools/calN50.js https://raw.githubusercontent.com/lh3/calN50/master/calN50.js
-k8 tools/calN50.js MDBG/example.asm.fa
-k8 tools/calN50.js -L 143700000 MDBG/example.asm.fa
+k8 tools/calN50.js MDBG/example.asm.fa > QC/nx.stats
+k8 tools/calN50.js -L 143700000 MDBG/example.asm.fa > QC/ngx.stats
 ```
 
 We can also calculate the conserved gene completeness based on the genes expected in this phylogeny. 
