@@ -169,6 +169,7 @@ datasets download genome accession \
 	unzip ncbi_dataset.zip && \
 	datasets rehydrate --directory .
 ```
+
 This will download the desired set of chromosomes for the comparison.
 First, we define a `REFERENCE` variable to make it easier to call:
 ```
@@ -190,19 +191,6 @@ ragtag.py scaffold $REFERENCE ragtag_output/ragtag.correct.fasta
 ```
 The result of this scaffolding is reported in `ragtag_output/ragtag.scaffold.fasta`
 
-And then using multiple assemblies.
-First, we run the scaffolding independently on each reference:
-```
-for genome in $( ls ncbi_dataset/data/*/chr3R.fna ); do
-	GENOME_NAME=$(basename $(dirname $genome))
-	ragtag.py scaffold -o ragtag_output/out_$GENOME_NAME $genome ragtag_output/ragtag.correct.fasta
-done
-```
-Then, we can merge the results with `ragtag merge`:
-```
-ragtag.py merge ragtag_output/example.msimpl.fa out_*/*.agp other.map.agp
-```
-
 Finally, we can fill in the gaps. This step can be done either using:
 1. *the raw reads*: e.g. [LR_Gapcloser](https://github.com/CAFS-bioinformatics/LR_Gapcloser), they can recover sequence that the assembler failed to reconstruct due to low coverage, local complexity or high heterozygosity, but requires aligning the raw reads to the scaffolds and fill the gaps iteratively, making it slow and needing error correction afterwards; or
 1. *a reference sequence*: e.g. `ragtag patch` uses the sequences from a reference genome to fill the gaps in our scaffolded assembly, suitable when the two genomes are similar (e.g. using a Hereford genome to patch an Angus, or a Marchigiana to patch a Chianina), it is much faster than using the original reads.
@@ -210,7 +198,7 @@ Finally, we can fill in the gaps. This step can be done either using:
 In this case, we will use the second approach, as it will deliver faster results for this exercise.
 We will do this using `ragtag patch`:
 ```
-ragtag patch ragtag_output/example.msimpl.fa $REFERENCE
+ragtag.py patch ragtag_output/ragtag.correct.fasta $REFERENCE
 ```
 This will generate a gap-filled genome, that we can now use to compare to the other assemblies.
 First, though, we can now repeat the quality metrics measurements using `CalN50`, `compleasm` and `yak`. Try to run it and check how the results have changed!
@@ -225,9 +213,14 @@ First, though, we can now repeat the quality metrics measurements using `CalN50`
 In this section we will integrate the five genomes we downloaded with our new one in one graph genome.
 There are currently a few different specialized solutions available to generate pangenomes; among the more popular, we can cite:
 1. [minigraph](https://github.com/lh3/minigraph): a fast and memory efficient algorithm, it adds one genome at the time to a backbone reference.
-1. [minigraph-cactus](): slower but more accurate, integrates `minigraph` in the [cactus]() workflow to achieve better resolution of large and small variants; limited to within-species comparisons.
+1. [minigraph-cactus](https://github.com/ComparativeGenomicsToolkit/cactus/blob/master/doc/pangenome.md): slower but more accurate, integrates `minigraph` in the [cactus](https://github.com/ComparativeGenomicsToolkit/cactus) workflow to achieve better resolution of large and small variants; limited to within-species comparisons.
 1. [pggb](https://github.com/pangenome/pggb): reference-free aligner, can project the differences among multiple genomes to a single backbone reference; can compare multiple species.
 1. [PanGenie](https://github.com/eblerjana/pangenie): `PanGenie` is a graph genome-based variant genotyper, and while it cannot generate the graph itself, it provides a set of utilities to create a graph compatible with it (or adapt the graphs from other callers)
+
+Firstly, we activate the right virtual environment:
+```
+conda activate pangenome_creation_env
+```
 
 Firstly, we will try to generate a contained graph genome focused on large rearrangements using [minigraph](https://github.com/lh3/minigraph). To do so, we can simply run the following command:
 ```
