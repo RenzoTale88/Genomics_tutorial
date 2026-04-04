@@ -26,16 +26,16 @@ First, we create the appropriate conda environments to analyse the data.
 We use anaconda once again, as it provides a reasonably fast and self-contained way to install all dependencies.
 We will still need separate environments to avoid compatibility issues:
 ```
-mamba create -n assembly_env -c conda-forge -c bioconda rust-mdbg gfatools fastp ragtag seqtk samtools ncbi-datasets-cli yak compleasm
-mamba create -n pangenome_creation_env -c conda-forge -c bioconda pggb minigraph
-mamba create -n pangenome_calling_env -c conda-forge -c bioconda pangenie
+mamba create -y -n assembly_env -c conda-forge -c bioconda rust-mdbg gfatools fastp ragtag seqtk samtools ncbi-datasets-cli yak compleasm
+mamba create -y -n pangenome_creation_env -c conda-forge -c bioconda pggb minigraph
+mamba create -y -n pangenome_calling_env -c conda-forge -c bioconda pangenie
 ```
 
 ### Data
-First thing, we have to download the appropriate data. To keep the analysis time within reason, we will use *Drosophila melanogaster* genomes. We will use a publicly available sample from ENA (SRR36576747):
+First thing, we have to download the appropriate data. To keep the analysis time within reason, we will use a small set of reads mapping to the 3R chromosome of Drosophila melanogaster from the databases ([SRR31301441](https://www.ebi.ac.uk/ena/browser/view/SRR31301441)):
 ```
-mkdir DATA
-wget -O DATA/hifi.fastq.gz ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR313/041/SRR31301441/SRR31301441_subreads.fastq.gz
+mkdir -p DATA
+wget -O DATA/hifi.fastq.gz "https://www.dropbox.com/scl/fi/k7q5e3l7glqsdryw2ppnc/hifi.3L.fastq.gz?rlkey=06z08ia07ojc9w88gwmefqc2z&st=vxyyyo79&dl=1"
 ```
 The file is quite large, so it will take a bit to download.
 Then, we activate the right environment for the initial analyses:
@@ -52,7 +52,7 @@ In particular, we want reads that have:
 
 We first create the output directory for the trimmed reads:
 ```
-mkdir TRIM
+mkdir -p TRIM
 ```
 
 Then, we can filter our reads by using fastp as follow:
@@ -91,7 +91,7 @@ gunzip -c TRIM/hifi.minQ20.min1Kb.fq.gz > TRIM/hifi.minQ20.min1Kb.fq
 
 The rust-mdbg assembler can be run in different ways, including a multi-testing approach that allows to assess the best parameters for the analysis. For sake of conciseness, we will use the same command provided in the tutorial. 
 ```
-rust-mdbg TRIM/hifi.minQ20.min1Kb.fq -k 31 -l 24 --density 0.003 --bf --minabund 2 --prefix MDBG/example
+rust-mdbg TRIM/hifi.minQ20.min1Kb.fq -k 55 -l 12 --density 0.003 --minabund 2 --bf --prefix MDBG/example
 ```
 
 In a real experiment, you'd assess multiple parameters in order to achieve the best assembly possible. It is also unlikely you will use rust-mdbg, as other solution deliver better results in reasonable amount of time.
@@ -136,19 +136,19 @@ k8 tools/calN50.js -L 143700000 MDBG/example.asm.fa > QC/ngx.stats
 We can also calculate the conserved gene completeness based on the genes expected in this phylogeny. 
 We'll manually install this tool due to unnecessary conflicts in conda.
 ```
-compleasm download diptera -L mb_download
-compleasm run -a MDBG/example.asm.fa -o completeness -l diptera -L mb_download -t 4
+compleasm download cetartiodactyla -L mb_download
+compleasm run -a MDBG/example.asm.fa -o completeness -l cetartiodactyla -L mb_download -t 1
 ```
 
 Finally, we can check the accuracy of our assembly by using the [yak](https://github.com/lh3/yak) software.
 First, we create the K-mer counts for the long reads with the `yak count`:
 ```
-yak count -b37 -t4 -o TRIM/ccs.yak TRIM/hifi.minQ20.min1Kb.fq.gz
+yak count -b37 -t1 -o TRIM/ccs.yak TRIM/hifi.minQ20.min1Kb.fq.gz
 ```
 
 Then, we can compute the quality values using `yak qv`:
 ```
-yak qv -t4 -p -K144m -l100k TRIM/ccs.yak MDBG/example.asm.fa > asm-sr.qv.txt
+yak qv -t1 -p -K144m -l100k TRIM/ccs.yak MDBG/example.asm.fa > asm-sr.qv.txt
 ```
 
 > *What is the contig N50?*
@@ -163,14 +163,16 @@ There are a number of tools identify and correct the misassemblies.
 In this tutorial, we will use the reference-based misassembly detection and correction. We will do this by using multiple chromosome 20 for multiple cattle breed from the public databases.
 First, we download the package of chromosome 25s from six different cattle assemblies using the [NCBI datasets API tool]():
 ```
-datasets download genome accession GCF_000001215.4 GCA_042606445.1 GCA_055723755.1 GCA_055682045.1 GCA_055681985.1 --include genome --dehydrated && \
+datasets download genome accession \
+	GCF_000001215.4 GCA_042606445.1 GCA_055723755.1 GCA_055682045.1 GCA_055681985.1 \
+	--chromosomes 3R --include genome --dehydrated && \
 	unzip ncbi_dataset.zip && \
 	datasets rehydrate --directory .
 ```
 This will download the desired set of chromosomes for the comparison.
 First, we define a `REFERENCE` variable to make it easier to call:
 ```
-REFERENCE=${PWD}/ncbi_dataset/data/GCF_000001215.4/GCF_000001215.4_Release_6_plus_ISO1_MT_genomic.fna
+REFERENCE=${PWD}/ncbi_dataset/data/GCF_000001215.4/3L.fna
 ```
 We can now refer to the reference genome using `$REFERENCE`
 
@@ -184,23 +186,25 @@ The result is in the `ragtag_output` directory.
 We can then scaffold the genome using the reference, or references, that we downloaded.
 We can first try with one single reference:
 ```
-ragtag.py scaffold $REFERENCE ragtag_output/example.msimpl.fa
+ragtag.py scaffold $REFERENCE ragtag_output/ragtag.correct.fasta
 ```
+The result of this scaffolding is reported in `ragtag_output/ragtag.scaffold.fasta`
 
 And then using multiple assemblies.
 First, we run the scaffolding independently on each reference:
 ```
-for genome in $( ls ncbi_dataset/data/*/*.fna ); do
-	ragtag.py scaffold $genome -o out_$genome ragtag_output/example.msimpl.fa
+for genome in $( ls ncbi_dataset/data/*/chr3R.fna ); do
+	GENOME_NAME=$(basename $(dirname $genome))
+	ragtag.py scaffold -o ragtag_output/out_$GENOME_NAME $genome ragtag_output/ragtag.correct.fasta
 done
 ```
 Then, we can merge the results with `ragtag merge`:
 ```
-ragtag merge ragtag_output/example.msimpl.fa out_*/*.agp other.map.agp
+ragtag.py merge ragtag_output/example.msimpl.fa out_*/*.agp other.map.agp
 ```
 
 Finally, we can fill in the gaps. This step can be done either using:
-1. *the raw reads*: e.g. [LR_gapfiller]() and can recover sequence that the `rust-mdbg` failed to assemble due to lower coverage, local complexity or high heterozygosity, but requires aligning the raw reads to the scaffolds and fill the gaps iteratively, making it slow and needing error correction afterwards; or
+1. *the raw reads*: e.g. [LR_Gapcloser](https://github.com/CAFS-bioinformatics/LR_Gapcloser), they can recover sequence that the assembler failed to reconstruct due to low coverage, local complexity or high heterozygosity, but requires aligning the raw reads to the scaffolds and fill the gaps iteratively, making it slow and needing error correction afterwards; or
 1. *a reference sequence*: e.g. `ragtag patch` uses the sequences from a reference genome to fill the gaps in our scaffolded assembly, suitable when the two genomes are similar (e.g. using a Hereford genome to patch an Angus, or a Marchigiana to patch a Chianina), it is much faster than using the original reads.
 
 In this case, we will use the second approach, as it will deliver faster results for this exercise.
@@ -231,4 +235,13 @@ mkdir -p GRAPH/MG/
 minigraph -cxggs -l10k ncbi_dataset/data/GCF_000001215.4/*.fna ncbi_dataset/data/GCA_*/*.fna ragtag_output/example.msimpl.fa > GRAPH/MG/minigraph.gfa
 ```
 This will generate a graph genome called `minigraph.gfa`. We can visualize the graph using `Bandage-NG`, which helps us visualize the content of the graph genome.
+
+### Pangenie
+First, we need to create a pangenome that is compatible with the software. PanGenie offers a few ways to generate a compatible VCF file. In our case, we will use their workflow and the five reference genomes. 
+First, we download the required workflow:
+```
+cd tools
+git clone https://bitbucket.org/jana_ebler/vcf-merging.git
+cd ../
+```
 
