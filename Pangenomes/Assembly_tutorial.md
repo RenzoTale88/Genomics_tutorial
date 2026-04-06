@@ -349,6 +349,10 @@ Before proceeding to the variant genotyping, we can summarise and visualize the 
 	```
 	odgi build --gfa GRAPH/VG/pangenie.gfa --out GRAPH/VG/pangenie.og
 	```
+1. Calculate the stats using `odgi stats`:
+	```
+	odgi stats -i GRAPH/VG/pangenie.og -S > GRAPH/VG/pangenie.og_stats
+	```
 1. And finally, visualize the graph using `odgi viz`:
 	```
 	odgi viz -i GRAPH/VG/pangenie.og -o GRAPH/VG/pangenie.png -x 1500
