@@ -23,12 +23,15 @@ This will comprise the following steps:
 ### Install dependencies
 First, we create the appropriate conda environments to analyse the data.
 
+To install mamba, please follow the instructions [here](../VariantCalling/WGS_tutorial.md).
+
 We use anaconda once again, as it provides a reasonably fast and self-contained way to install all dependencies.
 We will still need separate environments to avoid compatibility issues:
 ```
 mamba create -y -n assembly_env -c conda-forge -c bioconda rust-mdbg gfatools fastp ragtag seqtk samtools ncbi-datasets-cli yak compleasm
 mamba create -y -n pangenome_creation_env -c conda-forge -c bioconda pggb minigraph
-mamba create -y -n pangenome_calling_env -c conda-forge -c bioconda pangenie
+mamba create -y -n pangenome_calling_env -c conda-forge -c bioconda pangenie snakemake bcftools minimap2 bedtools pyvcf rtg-tools pyfaidx matplotlib vcftools samtools gatk4 seqtk pysam bwa picard matplotlib intervaltree cython conda-forge::openjdk
+mamba create -y -n multiqc_env -c conda-forge -c bioconda multiqc
 ```
 
 ### Data
@@ -81,7 +84,7 @@ Now that we QC'd our reads, we can proceed at generating a genome assembly. We c
 These solutions generally offer good results and reasonable run time. However, due to the lack of power on our individual machines, we will use [rust-mdbg](https://github.com/ekimb/rust-mdbg), which is an ultra-fast assembler, capable of generating human-sized assemblies on a single laptop.
 First, we create the directory for the outputs:
 ```
-mkdir MDBG
+mkdir -p MDBG
 ```
 
 Firstly, we convert the fastq to fasta using [seqtk]():
@@ -130,25 +133,48 @@ First, we compute the Nx statistics with `calN50`:
 mkdir tools
 wget -O tools/calN50.js https://raw.githubusercontent.com/lh3/calN50/master/calN50.js
 k8 tools/calN50.js MDBG/example.asm.fa > QC/nx.stats
-k8 tools/calN50.js -L 143700000 MDBG/example.asm.fa > QC/ngx.stats
+k8 tools/calN50.js -L 32079331 MDBG/example.asm.fa > QC/ngx.stats
 ```
 
 We can also calculate the conserved gene completeness based on the genes expected in this phylogeny. 
-We'll manually install this tool due to unnecessary conflicts in conda.
+To run this stage, we need to first download the database appropriate for our lineage:
 ```
-compleasm download cetartiodactyla -L mb_download
-compleasm run -a MDBG/example.asm.fa -o completeness -l cetartiodactyla -L mb_download -t 1
+compleasm download diptera -L mb_download
 ```
+
+Then, we can run the analysis to assess the genome completeness.
+```
+compleasm run -a MDBG/example.asm.fa -o QC/completeness -l eukaryota -L mb_download -t 1
+```
+The result should look something like:
+```
+S:25.58%, 33
+D:20.16%, 26
+F:1.55%, 2
+I:0.00%, 0
+M:52.71%, 68
+N:129
+```
+Being a single chromosome, we would expect it to be low. Worth noticing that we used `eukaryota` as lineage, but using more specific lineages is advisable in real life scenarios (e.g. `diptera` for *Drosophila*).
 
 Finally, we can check the accuracy of our assembly by using the [yak](https://github.com/lh3/yak) software.
 First, we create the K-mer counts for the long reads with the `yak count`:
 ```
-yak count -b37 -t1 -o TRIM/ccs.yak TRIM/hifi.minQ20.min1Kb.fq.gz
+yak count -b37 -t2 -o TRIM/ccs.yak TRIM/hifi.minQ20.min1Kb.fq.gz
 ```
 
 Then, we can compute the quality values using `yak qv`:
 ```
-yak qv -t1 -p -K144m -l100k TRIM/ccs.yak MDBG/example.asm.fa > asm-sr.qv.txt
+yak qv -t1 -p -K144m -l100k TRIM/ccs.yak MDBG/example.asm.fa > QC/asm-lr.qv.txt
+```
+The part of interest for our work is at the bottom of the file, and should look like this:
+```
+tail -5 QC/asm-lr.qv.txt
+CT	0	0	543263	nan
+FR	0.027	0.0159
+ER	13542908	0.000
+CV	0.292
+QV	28.792	28.792
 ```
 
 > *What is the contig N50?*
@@ -173,7 +199,7 @@ datasets download genome accession \
 This will download the desired set of chromosomes for the comparison.
 First, we define a `REFERENCE` variable to make it easier to call:
 ```
-REFERENCE=${PWD}/ncbi_dataset/data/GCF_000001215.4/3L.fna
+REFERENCE=${PWD}/ncbi_dataset/data/GCF_000001215.4/chr3R.fna
 ```
 We can now refer to the reference genome using `$REFERENCE`
 
@@ -198,12 +224,13 @@ Finally, we can fill in the gaps. This step can be done either using:
 In this case, we will use the second approach, as it will deliver faster results for this exercise.
 We will do this using `ragtag patch`:
 ```
-ragtag.py patch ragtag_output/ragtag.correct.fasta $REFERENCE
+samtools faidx ragtag_output/ragtag.scaffold.fasta
+samtools faidx ragtag_output/ragtag.scaffold.fasta NT_033777.3_RagTag > ragtag_output/ragtag.chr3R.fasta
+ragtag.py patch ragtag_output/ragtag.chr3R.fasta $REFERENCE
 ```
 This will generate a gap-filled genome, that we can now use to compare to the other assemblies.
 First, though, we can now repeat the quality metrics measurements using `CalN50`, `compleasm` and `yak`. Try to run it and check how the results have changed!
 
-> *What is the new N50?*
 > *Has the completeness improved?*
 > *Is the genome any more accurate?*
 
@@ -225,16 +252,129 @@ conda activate pangenome_creation_env
 Firstly, we will try to generate a contained graph genome focused on large rearrangements using [minigraph](https://github.com/lh3/minigraph). To do so, we can simply run the following command:
 ```
 mkdir -p GRAPH/MG/
-minigraph -cxggs -l10k ncbi_dataset/data/GCF_000001215.4/*.fna ncbi_dataset/data/GCA_*/*.fna ragtag_output/example.msimpl.fa > GRAPH/MG/minigraph.gfa
+minigraph -cxggs -l10k ncbi_dataset/data/GCF_000001215.4/*.fna ncbi_dataset/data/GCA_*/*.fna ragtag_output/ragtag.patch.fasta > GRAPH/MG/minigraph.gfa
 ```
 This will generate a graph genome called `minigraph.gfa`. We can visualize the graph using `Bandage-NG`, which helps us visualize the content of the graph genome.
 
+The stats for the graph are calculated using `gfatools`:
+```
+gfatools stat GRAPH/MG/minigraph.gfa > GRAPH/MG/minigraph.stats
+```
+
+We can extract the variants from the graph in bed format using:
+```
+gfatools bubble GRAPH/MG/minigraph.gfa > GRAPH/MG/minigraph.bed
+```
+
 ### Pangenie
-First, we need to create a pangenome that is compatible with the software. PanGenie offers a few ways to generate a compatible VCF file. In our case, we will use their workflow and the five reference genomes. 
+First, we need to create a pangenome that is compatible with the software. PanGenie offers a few ways to generate a compatible VCF file. In our case, we will use their workflow and the five genomes we have available (not ours, though we could provided we add an extra genome).
 First, we download the required workflow:
 ```
 cd tools
-git clone https://bitbucket.org/jana_ebler/vcf-merging.git
+git clone https://bitbucket.org/jana_ebler/vcf-merging
 cd ../
 ```
 
+Then, we create the appropriate configuration file:
+```
+echo "{
+	\"reference\": {
+		\"filename\": \"${PWD}/ncbi_dataset/data/GCF_000001215.4/chr3R.fna\",
+		\"haploid_chromosomes\": [\"chrX\", \"chrY\"]
+	},
+	\"assemblies\": {
+		\"sample1\" : [\"${PWD}/ncbi_dataset/data/GCA_055681985.1/chr3R.fna\", \"${PWD}/ncbi_dataset/data/GCA_055682045.1/chr3R.fna\"],
+		\"sample2\" : [\"${PWD}/ncbi_dataset/data/GCA_055723755.1/chr3R.fna\", \"${PWD}/ncbi_dataset/data/GCA_042606445.1/chr3R.fna\"]
+	},
+	\"trios\": {},
+	\"scripts\": \"scripts\",
+	\"outdir\" : \"results/\"
+}" > tools/vcf-merging/pangenome-graph-from-assemblies/config.json
+```
+We activate the right environment:
+```
+conda activate pangenome_calling_env
+```
+
+Then, we can run the pangenome creation:
+```
+pushd tools/vcf-merging/pangenome-graph-from-assemblies/
+snakemake -j 1
+popd
+```
+
+The resulting graph genome will be saved in `vcf-merging/pangenome-graph-from-assemblies/results/multisample-vcfs/graph-filtered.vcf`.
+Finally, we can generate the index for PanGenie as follow:
+```
+mkdir -p GRAPH/PANGENIE
+PanGenie-index \
+	-v tools/vcf-merging/pangenome-graph-from-assemblies/results/multisample-vcfs/graph-filtered.vcf \
+	-r ncbi_dataset/data/GCF_000001215.4/chr3R.fna \
+	-t 1 \
+	-e 40000000 \
+	-o GRAPH/PANGENIE/pangenome
+```
+
+Then, we download a illumina sequenced sample (this is a subsample of [ERR9463066](https://www.ebi.ac.uk/ena/browser/view/ERR9463066)):
+```
+wget -O DATA/ERR9463066_1.fastq.gz "https://www.dropbox.com/scl/fi/a83drwpy1p59i54ybedwm/ERR9463066_3R_1.fq.gz?rlkey=natvqs3x8aipv0ldr4wteab0q&st=xttnm490&dl=1"
+wget -O DATA/ERR9463066_2.fastq.gz "https://www.dropbox.com/scl/fi/co9k2v4r3wb46dtfqov1t/ERR9463066_3R_2.fq.gz?rlkey=b5hkag6xakj23ssdk9cqfwwn6&st=2xi97nf5&dl=1"
+```
+
+We can call the variants in the pangenome using the raw FASTQs as follow:
+```
+mkdir -p PANGENIE/
+zcat DATA/ERR9463066_*.fastq.gz > DATA/ERR9463066.fq
+PanGenie \
+	-f GRAPH/PANGENIE/pangenome \
+	-i DATA/ERR9463066.fq \
+	-s ERR9463066 \
+	-j 1 -t 1 \
+	-e 40000000 \
+	-o PANGENIE/ERR9463066
+rm DATA/ERR9463066.fq
+```
+
+This will generate a VCF file that can be indexed and visualized with `bcftools`:
+```
+bcftools view PANGENIE/ERR9463066*
+```
+
+If you want, you can run a second sample by downloading the following two FASTQs:
+```
+wget -O DATA/ERR5717069_1.fastq.gz "https://www.dropbox.com/scl/fi/2lsrh22j7olw55lfslg80/ERR5717069_3R_1.fq.gz?rlkey=90uifjd1trb1x06jegykc68rv&st=ytpaf5yz&dl=1"
+wget -O DATA/ERR5717069_2.fastq.gz "https://www.dropbox.com/scl/fi/a24gy23wxqi0oxtcf7dca/ERR5717069_3R_2.fq.gz?rlkey=3xgnck2zffcv0197k5wt0sndi&st=v4nii79n&dl=1"
+```
+And repeat the alignment:
+```
+zcat DATA/ERR5717069_*.fastq.gz > DATA/ERR5717069.fq
+PanGenie \
+	-f GRAPH/PANGENIE/pangenome \
+	-i DATA/ERR5717069.fq \
+	-s ERR5717069 \
+	-j 1 -t 1 \
+	-e 40000000 \
+	-o PANGENIE/ERR5717069
+rm DATA/ERR5717069.fq
+```
+
+These samples should contain the same set of variants for both individuals. For this reasons, it is possible to merge samples simply by running `bcftools merge`.
+First, we compress and index all VCF files:
+```
+bgzip PANGENIE/*.vcf
+for i in $( ls PANGENIE/*.vcf.gz ); do tabix -p vcf $i; done
+```
+
+Then, we combine with `bcftools`:
+```
+bcftools merge -O z -o pangenie.vcf.gz --write-index=tbi PANGENIE/*.vcf.gz
+```
+And collect stats with:
+```
+bcftools stats pangenie.vcf.gz > pangenie.bcftools_stats
+```
+
+Finally, we can summarize all the statistics with multiqc:
+```
+
+```
