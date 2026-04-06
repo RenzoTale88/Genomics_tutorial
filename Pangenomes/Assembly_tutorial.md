@@ -29,8 +29,8 @@ We use anaconda once again, as it provides a reasonably fast and self-contained 
 We will still need separate environments to avoid compatibility issues:
 ```
 mamba create -y -n assembly_env -c conda-forge -c bioconda rust-mdbg gfatools fastp ragtag seqtk samtools ncbi-datasets-cli yak compleasm
-mamba create -y -n pangenome_creation_env -c conda-forge -c bioconda pggb minigraph
-mamba create -y -n pangenome_calling_env -c conda-forge -c bioconda pangenie snakemake bcftools minimap2 bedtools pyvcf rtg-tools pyfaidx matplotlib vcftools samtools gatk4 seqtk pysam bwa picard matplotlib intervaltree cython conda-forge::openjdk
+mamba create -y -n pangenome_creation_env -c conda-forge -c bioconda pggb minigraph gfatools vg odgi
+mamba create -y -n pangenome_calling_env -c conda-forge -c bioconda pangenie snakemake bcftools minimap2 bedtools pyvcf rtg-tools pyfaidx matplotlib vcftools samtools gatk4 seqtk pysam bwa picard matplotlib intervaltree cython conda-forge::openjdk vg odgi
 mamba create -y -n multiqc_env -c conda-forge -c bioconda multiqc
 ```
 
@@ -252,19 +252,42 @@ conda activate pangenome_creation_env
 Firstly, we will try to generate a contained graph genome focused on large rearrangements using [minigraph](https://github.com/lh3/minigraph). To do so, we can simply run the following command:
 ```
 mkdir -p GRAPH/MG/
-minigraph -cxggs -l10k ncbi_dataset/data/GCF_000001215.4/*.fna ncbi_dataset/data/GCA_*/*.fna ragtag_output/ragtag.patch.fasta > GRAPH/MG/minigraph.gfa
+minigraph -cxggs -l10k ncbi_dataset/data/GCF_000001215.4/*.fna ncbi_dataset/data/GCA_*/*.fna ragtag_output/ragtag.patch.fasta > GRAPH/MG/minigraph.r.gfa
 ```
-This will generate a graph genome called `minigraph.gfa`. We can visualize the graph using `Bandage-NG`, which helps us visualize the content of the graph genome.
+This will generate a graph genome called `minigraph.r.gfa`. We can visualize the graph using `Bandage-NG`, which helps us visualize the content of the graph genome.
 
 The stats for the graph are calculated using `gfatools`:
 ```
-gfatools stat GRAPH/MG/minigraph.gfa > GRAPH/MG/minigraph.stats
+gfatools stat GRAPH/MG/minigraph.r.gfa > GRAPH/MG/minigraph.stats
 ```
 
 We can extract the variants from the graph in bed format using:
 ```
-gfatools bubble GRAPH/MG/minigraph.gfa > GRAPH/MG/minigraph.bed
+gfatools bubble GRAPH/MG/minigraph.r.gfa > GRAPH/MG/minigraph.bed
 ```
+
+Another way to handle the graph genome is through the use of tools such as [vg](https://github.com/vgteam/vg) and [odgi](https://odgi.readthedocs.io/en/latest/index.html):
+[vg](https://github.com/vgteam/vg) is a toolkit for graph genome analysis, allowing reads mapping, post processing and variant calling. It offers one of the standard pipelines to process and analyse graph genomes.
+[odgi](https://odgi.readthedocs.io/en/latest/index.html) is a convenience toolkit to process graph genomes, allowing multiple functions to manipulate and visualize the graph.
+
+To visualize the graph, we need to first convert out `[minigraph](https://github.com/lh3/minigraph)` output to the standard [GFAv1](https://github.com/GFA-spec/GFA-spec/blob/master/GFA1.md) format. Indeed, `[minigraph](https://github.com/lh3/minigraph)` generates the output in a custom variant of the GFA format, the referenced-GFA format `[rGFA](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md)`. We can do the conversion using `[vg convert](https://github.com/vgteam/vg?tab=readme-ov-file#importing)`: 
+```
+vg convert -g GRAPH/MG/minigraph.r.gfa -f > GRAPH/MG/minigraph.gfa 
+```
+And then import it in `[odgi](https://odgi.readthedocs.io/en/latest/index.html)`'s own `.og` format using:
+```
+odgi build --gfa GRAPH/MG/minigraph.gfa --out GRAPH/MG/minigraph.og
+```
+
+From this, we can calculate statistics using `[odgi stats](https://odgi.readthedocs.io/en/latest/rst/commands/odgi_stats.html)`:
+```
+odgi stats -i GRAPH/MG/minigraph.og -S > GRAPH/MG/minigraph.og_stats
+```
+We can then generate a visualization using the `[og viz](https://odgi.readthedocs.io/en/latest/rst/commands/odgi_viz.html)` command:
+```
+odgi viz -i GRAPH/MG/minigraph.og -o GRAPH/MG/minigraph.png -x 1500
+```
+
 
 ### Pangenie
 First, we need to create a pangenome that is compatible with the software. PanGenie offers a few ways to generate a compatible VCF file. In our case, we will use their workflow and the five genomes we have available (not ours, though we could provided we add an extra genome).
@@ -300,10 +323,37 @@ Then, we can run the pangenome creation:
 ```
 pushd tools/vcf-merging/pangenome-graph-from-assemblies/
 snakemake -j 1
+bgzip -c results/multisample-vcfs/graph-filtered.vcf > results/multisample-vcfs/graph-filtered.vcf.gz
+tabix -p vcf results/multisample-vcfs/graph-filtered.vcf.gz
 popd
 ```
 
 The resulting graph genome will be saved in `vcf-merging/pangenome-graph-from-assemblies/results/multisample-vcfs/graph-filtered.vcf`.
+Before proceeding to the variant genotyping, we can summarise and visualize the stats from the graph genome using again `vg` and `odgi`. We will proceed as follow:
+1. Convert the VCF file to `.gbz` format using `vg autoindex` (necessary to include the haplotypes in the file): 
+	```
+	vg autoindex \
+		-w sr-giraffe \
+		-T GRAPH/VG/ \
+		--target-mem 2G \
+		-t 1 \
+		-p GRAPH/VG/pangenie \
+		-r $REFERENCE \
+		-v tools/vcf-merging/pangenome-graph-from-assemblies/results/multisample-vcfs/graph-filtered.vcf.gz
+	```
+1. Convert the `.vg` to GFA using `vg convert`; the `-W` is necessary to convert the haplotypes from walks `W` lines to path `P` lines:
+	```
+	vg convert -W -f GRAPH/VG/pangenie.giraffe.gbz > GRAPH/VG/pangenie.gfa
+	```
+1. Convert to `.og` format with `odgi build`:
+	```
+	odgi build --gfa GRAPH/VG/pangenie.gfa --out GRAPH/VG/pangenie.og
+	```
+1. And finally, visualize the graph using `odgi viz`:
+	```
+	odgi viz -i GRAPH/VG/pangenie.og -o GRAPH/VG/pangenie.png -x 1500
+	```
+
 Finally, we can generate the index for PanGenie as follow:
 ```
 mkdir -p GRAPH/PANGENIE
@@ -376,5 +426,6 @@ bcftools stats pangenie.vcf.gz > pangenie.bcftools_stats
 
 Finally, we can summarize all the statistics with multiqc:
 ```
-
+conda activate multiqc
+multiqc .
 ```
