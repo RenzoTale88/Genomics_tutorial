@@ -281,7 +281,7 @@ odgi build --gfa GRAPH/MG/minigraph.gfa --out GRAPH/MG/minigraph.og
 
 From this, we can calculate statistics using `[odgi stats](https://odgi.readthedocs.io/en/latest/rst/commands/odgi_stats.html)`:
 ```
-odgi stats -i GRAPH/MG/minigraph.og -S > GRAPH/MG/minigraph.og_stats
+odgi stats -i GRAPH/MG/minigraph.og -m -sgdl > GRAPH/MG/minigraph.og.stats.yaml
 ```
 We can then generate a visualization using the `[og viz](https://odgi.readthedocs.io/en/latest/rst/commands/odgi_viz.html)` command:
 ```
@@ -351,11 +351,16 @@ Before proceeding to the variant genotyping, we can summarise and visualize the 
 	```
 1. Calculate the stats using `odgi stats`:
 	```
-	odgi stats -i GRAPH/VG/pangenie.og -S > GRAPH/VG/pangenie.og_stats
+	odgi stats -i GRAPH/VG/pangenie.og -m -sgdl > GRAPH/VG/pangenie.og.stats.yaml
 	```
-1. And finally, visualize the graph using `odgi viz`:
+1. Visualize the graph using `odgi viz` :
 	```
 	odgi viz -i GRAPH/VG/pangenie.og -o GRAPH/VG/pangenie.png -x 1500
+	```
+1. And finally visualize with `odgi layout` + `odgi draw` (the latter two can be slow and memory intensive)
+	```
+	odgi layout -i GRAPH/VG/pangenie.og -o GRAPH/VG/pangenie.og.lay
+	odgi draw -i GRAPH/VG/pangenie.og -c GRAPH/VG/pangenie.og.lay -p GRAPH/VG/pangenie.og.lay.draw.png -w 10 -C
 	```
 
 Finally, we can generate the index for PanGenie as follow:
