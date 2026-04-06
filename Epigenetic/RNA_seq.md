@@ -9,9 +9,17 @@ In this tutorial we will go over how to analyse Illumina RNA-seq data. This will
 
 ## Setting up the environment
 
-To install the various tools we will need to analyse the RNA-seq data we will need to first install a range of packages using Ubuntu’s package manager apt. These are required for, for example, to compile the software. On other servers many of these packages may already be installed.
+To install the various tools we will need to analyse the RNA-seq data we will need to first install a range of packages using Ubuntu’s package manager apt. These are required for, for example, to compile the software. On other servers many of these packages may already be installed. Once more, we will do it using [anaconda](https://anaconda.org/).
+
+To install mamba, please follow the instructions [here](../VariantCalling/WGS_tutorial.md).
+
+Then, run the virtual environment creation:
 ```
-mamba create -n rnaseq_env -c conda-forge -c bioconda samtools multiqc STAR salmon bioconductor-deseq2 bioconductor-pcaexplorer gffread bioconductor-reportingtools bioconductor-tximport
+mamba create -n rnaseq_env -y -c conda-forge -c bioconda samtools multiqc STAR salmon bioconductor-deseq2 bioconductor-pcaexplorer gffread bioconductor-reportingtools bioconductor-tximport bioconductor-genomeinfodbdata r-markdown fastqc
+```
+And then activate the environment:
+```
+mamba activate rnaseq_env
 ```
 
 ## Obtaining the sequencing data
@@ -23,15 +31,16 @@ mkdir RNASeq && cd RNASeq
 
 We can now download the sequencing data into the new folder. To do this we will use the wget program that can pull files from the internet (in this case dropbox):
 ```
-wget https://www.dropbox.com/s/scwahcxvw92iwhw/HF3471_bcell_chr1_1.fq.gz
-wget https://www.dropbox.com/s/0o93kgjh0hidkw1/HF3471_bcell_chr1_2.fq.gz
+mkdir -p DATA
+wget -O DATA/HF3471_bcell_chr1_1.fq.gz https://www.dropbox.com/s/scwahcxvw92iwhw/HF3471_bcell_chr1_1.fq.gz
+wget -O DATA/HF3471_bcell_chr1_2.fq.gz https://www.dropbox.com/s/0o93kgjh0hidkw1/HF3471_bcell_chr1_2.fq.gz
 ```
 
 Note there are two sets of reads as this is paired end data.
 
 You can view the fastq files using `less`, which is a special version of the `less` tool for viewing compressed files:
 ```
-`less` HF3471_bcell_chr1_1.fq.gz
+less HF3471_bcell_chr1_1.fq.gz
 ```
 
 As with `less` just need to press q to quit the viewer.
@@ -43,7 +52,7 @@ The first thing to do for almost any sequencing project is to check the quality 
 To run FastQC on the sequencing data we downloaded from Dropbox we first make a directory to store the results in (using mkdir) then run FastQC specifying the sequencing files and this output directory:
 ```
 mkdir FastQC_output
-FastQC/fastqc HF3471_bcell_chr1_1.fq.gz HF3471_bcell_chr1_2.fq.gz --outdir=FastQC_output/
+fastqc DATA/HF3471_bcell_chr1_1.fq.gz DATA/HF3471_bcell_chr1_2.fq.gz --outdir=FastQC_output/
 ```
 
 There should now be files ending in html in the FastQC_output folder.
@@ -57,31 +66,25 @@ Have a look at your FastQC reports.
 ## Prepare for alignment
 
 To align our paired-end reads we will use the (STAR) aligner that is designed specifically for aligning RNA-seq data. 
-In our case, we will use the STAR aligner. However, this software first needs to be compiled, which effectively means converting human-readable code into computer-readable code. To do this we will compile the code using make. So we change directory (cd) into the folder with the code we want to compile in and run make:
-
-cd STAR-2.7.10a/source
-make STAR
-
-Now we return back to our original folder (each .. goes back up one directory).
-
-cd ../../
+In our case, we will use the STAR aligner. 
 
 To run STAR we first need to make a genome index. To do this we need to download the genome we want to align against and a gtf file specifying the location of known genes. STAR uses the latter to determine where known splice sites are (though STAR is still able to find other splice sites in the reads).
 
 To make things run more quickly, rather than align reads to the whole cow genome, we will just map them to chromosome 1. We have already extracted the sequence of chromosome 1 and saved it in the chr1.fa file on dropbox.
 ```
-wget https://www.dropbox.com/s/sn5grtpczlgf48l/chr1.fa.gz
+mkdir REFERENCE
+wget -O REFERENCE/chr1.fa.gz https://www.dropbox.com/s/sn5grtpczlgf48l/chr1.fa.gz
 ```
 We will download the gtf file specifying the location of known cow genes from Ensembl and then uncompress both files.
 ```
-wget https://www.dropbox.com/s/1i145zewlw43gjn/Bos_taurus.ARS-UCD1.2.106.gtf.gz
-gunzip chr1.fa.gz
-gunzip Bos_taurus.ARS-UCD1.2.106.gtf.gz
+wget -O REFERENCE/Bos_taurus.ARS-UCD1.2.106.gtf.gz https://www.dropbox.com/s/1i145zewlw43gjn/Bos_taurus.ARS-UCD1.2.106.gtf.gz
+gunzip REFERENCE/chr1.fa.gz
+gunzip REFERENCE/Bos_taurus.ARS-UCD1.2.106.gtf.gz
 ```
 Take a look at these files to see their format (remember to press q to exit the viewer):
 ```
-less chr1.fa
-less Bos_taurus.ARS-UCD1.2.106.gtf
+less REFERENCE/chr1.fa
+less REFERENCE/Bos_taurus.ARS-UCD1.2.106.gtf
 ```
 
 More details on the format of the gtf file can be found here.
@@ -93,12 +96,12 @@ mkdir STAR_genome
 
 And then we build the index:
 ```
-STAR-2.7.10a/source/STAR --runThreadN 3 \
+STAR --runThreadN 3 \
 --runMode genomeGenerate \
 --genomeDir STAR_genome \
 --genomeSAindexNbases 12 \
---genomeFastaFiles chr1.fa \
---sjdbGTFfile Bos_taurus.ARS-UCD1.2.106.gtf \
+--genomeFastaFiles REFERENCE/chr1.fa \
+--sjdbGTFfile REFERENCE/Bos_taurus.ARS-UCD1.2.106.gtf \
 --sjdbOverhang 99
 ```
 
@@ -111,9 +114,9 @@ Now we have the genome index we can align our RNA-seq reads to it. As before we 
 ```
 mkdir STAR_output
 
-STAR-2.7.10a/source/STAR --runThreadN 3 \
+STAR --runThreadN 3 \
 --genomeDir STAR_genome \
---readFilesIn HF3471_bcell_chr1_1.fq.gz HF3471_bcell_chr1_2.fq.gz \
+--readFilesIn DATA/HF3471_bcell_chr1_1.fq.gz DATA/HF3471_bcell_chr1_2.fq.gz \
 --readFilesCommand zcat \
 --quantMode TranscriptomeSAM GeneCounts \
 --outFileNamePrefix ./STAR_output/
@@ -138,18 +141,18 @@ Now we have successfully aligned our genes to the genome and transcriptome we ar
 Salmon needs the sequences of the transcripts used. We will extract these from the gtf and genome fasta file we used with STAR. Using the `gffread` software we extract the sequences for the transcripts. In this tutorial we are only using genes on chromosome 1 so first we pull out of the gtf file those genes on this chromosome. Then use gffread to get the sequences:
 
 ```
-grep -w "^1" Bos_taurus.ARS-UCD1.2.106.gtf > chr1.gtf
-gffread -w transcripts.fa -g chr1.fa chr1.gtf
+grep -w "^1" REFERENCE/Bos_taurus.ARS-UCD1.2.106.gtf > REFERENCE/chr1.gtf
+gffread -w REFERENCE/transcripts.fa -g REFERENCE/chr1.fa REFERENCE/chr1.gtf
 ```
 
-Now if you look at the transcripts.fa file can see contains the sequences of the transcripts:
+Now if you look at the `transcripts.fa` file can see contains the sequences of the transcripts:
 ```
-less transcripts.fa
+less REFERENCE/transcripts.fa
 ```
 Now we can use this with the output from STAR to get transcript level expression levels
 ```
 salmon quant --threads 3 \
-        --targets transcripts.fa \
+        --targets REFERENCE/transcripts.fa \
         --libType A \
         --output salmon_output/HF3471_bcell \
         --alignments ./STAR_output/Aligned.toTranscriptome.out.bam
@@ -204,7 +207,7 @@ We are now ready to go!
 
 When we ran salmon it quantified the expression level of each transcript. However, DESeq2 requires us to provide information on which gene each transcript belongs to. To get this information we will query the Ensembl database using the biomaRt package. It requires us to specify which dataset at Ensembl we want to query. As this is cows we specify btaurus_gene_ensembl, but for other species you would change accordingly.
 ```
-txdb1 <- makeTxDbFromBiomart(dataset="btaurus_gene_ensembl")
+txdb1 <- txdbmaker::makeTxDbFromBiomart(dataset="btaurus_gene_ensembl")
 txdb1
 ```
 
@@ -276,11 +279,6 @@ Thats it! So have gone from raw sequencing reads to a list of differentially exp
 
 If have time you can try plotting a heatmap and PCA of the relationships between the samples. You can do this with the PCAexplorer package however to run this you will need to do it on your laptop rather than the server, as it generates an interactive panel. So would download the example salmon data from dropbox to your laptop and rerun the R code as above. Then can run the code below to generate the report:
 ```
-if (!require("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
-
-BiocManager::install("pcaExplorer")
-
 library("pcaExplorer")
-pcaExplorer(dds = dds)
+pcaExplorer(dds = dds) %>% ggsave("rnaseq_pca.pdf")
 ```
