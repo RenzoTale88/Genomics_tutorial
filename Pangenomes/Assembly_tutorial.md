@@ -16,8 +16,9 @@ This will comprise the following steps:
 	1. Gap filling
 1. Pangenome generation:
 	1. ([minigraph](https://github.com/lh3/minigraph))
-	1. ([pggb](https://github.com/pangenome/pggb))
+	1. statistics with [odgi](https://odgi.readthedocs.io/en/latest/index.html)
 1. Pangenome visualization ([Bandage-NG](https://github.com/asl/BandageNG))
+1. Pangenome variant calling ([PanGenie](https://github.com/eblerjana/pangenie))
 
 ## *De novo* genome assembly
 
