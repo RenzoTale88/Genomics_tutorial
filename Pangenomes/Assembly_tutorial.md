@@ -9,6 +9,7 @@ This will comprise the following steps:
 1. Quality assessment:
 	1. N50 ([CalN50.js](https://github.com/lh3/calN50))
 	1. Completeness ([compleasm](https://github.com/huangnengCSU/compleasm.git))
+	1. Accuracy ([yak](https://github.com/lh3/yak.git))
 1. Post-processing ([RagTag](https://github.com/malonge/RagTag)):
 	1. Misassembly correction
 	1. Reference-based scaffolding
