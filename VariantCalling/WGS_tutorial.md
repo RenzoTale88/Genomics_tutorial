@@ -321,10 +321,10 @@ when performing the variant calling.
 If you decide to start the analyses from after the variant calling, you can download the called VCF files as follow:
 ```
 mkdir -p GVCFS/
-wget https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/Holstein_1.gvcf.gz
-wget https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/Holstein_1.gvcf.gz.tbi
-wget https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/NDama_1.gvcf.gz
-wget https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/NDama_1.gvcf.gz.tbi
+wget -O GVCFS/Holstein_1.gvcf.gz https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/Holstein_1.gvcf.gz
+wget -O GVCFS/Holstein_2.gvcf.gz https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/Holstein_1.gvcf.gz.tbi
+wget -O GVCFS/NDama_1.gvcf.gz https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/NDama_1.gvcf.gz
+wget -O GVCFS/NDama_2.gvcf.gz https://raw.githubusercontent.com/RenzoTale88/Genomics_tutorial/refs/heads/main/toy/GVCFS/NDama_1.gvcf.gz.tbi
 ```
 
 ## Combining the GVCFs
